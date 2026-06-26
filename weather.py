@@ -1,4 +1,8 @@
 import os
+os.environ['MPLBACKEND'] = 'Agg'
+import matplotlib
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 import requests
 import pandas as pd
 from datetime import date
@@ -50,6 +54,41 @@ def get_current_weather(lat, lon):
     response = requests.get(url, params=params)
     return response.json()
 
+def generate_dashboard():
+    df = pd.read_csv("daily_log.csv", skipinitialspace=True)
+    df["datetime"] = pd.to_datetime(df["time"])
+    df = df.sort_values("datetime")
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.plot(df["datetime"], df["temp_f"], color="steelblue",
+            linewidth=2, marker='o', markersize=5, label="Temp (°F)")
+
+    max_idx = df["temp_f"].idxmax()
+    min_idx = df["temp_f"].idxmin()
+
+    ax.scatter(df.loc[max_idx, "datetime"], df.loc[max_idx, "temp_f"],
+               color="red", zorder=5, label=f"Max: {df.loc[max_idx, 'temp_f']}°F")
+    ax.scatter(df.loc[min_idx, "datetime"], df.loc[min_idx, "temp_f"],
+               color="blue", zorder=5, label=f"Min: {df.loc[min_idx, 'temp_f']}°F")  # ← just added
+    ax.annotate(f"Max: {df.loc[max_idx, 'temp_f']}°F",
+                xy=(df.loc[max_idx, "datetime"], df.loc[max_idx, "temp_f"]),
+                xytext=(10, 10), textcoords="offset points",
+                color="red", fontsize=9)
+    ax.annotate(f"Min: {df.loc[min_idx, 'temp_f']}°F",
+                xy=(df.loc[min_idx, "datetime"], df.loc[min_idx, "temp_f"]),
+                xytext=(10, -15), textcoords="offset points",
+                color="blue", fontsize=9)
+
+    ax.set_ylim(df["temp_f"].min() - 5, df["temp_f"].max() + 8)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d %H:%M"))
+    plt.xticks(rotation=45)
+    ax.set_title("My City Temperature Dashboard")
+    ax.set_ylabel("Temperature (°F)")
+    ax.legend()
+    plt.tight_layout()
+    plt.savefig("dashboard.png", dpi=150)
+    plt.close()
+
 today = date.today()
 current_year = today.year
 
@@ -82,6 +121,22 @@ forecast_df = pd.DataFrame({
     "max_temp": forecast_data["daily"]["temperature_2m_max"],
     "min_temp": forecast_data["daily"]["temperature_2m_min"]
 })
+current_data = get_current_weather(LATITUDE, LONGITUDE)
+current_temp = current_data["current"]["temperature_2m"]
+temp_c = current_temp
+temp_f = round(temp_c * 9/5 + 32, 1)
+current_time = current_data["current"]["time"]
+
+log_df = pd.DataFrame({
+    "date": [str(today)],
+    "time": [current_time],
+    "temperature_2m": [temp_c],
+    "temp_f": [temp_f]
+})
+log_file = "daily_log.csv"
+log_df.to_csv(log_file, mode='a', header=not os.path.isfile(log_file), index=False)
+print(f"Logged current temperature: {temp_c} degrees C / {temp_f} degrees F at {current_time}")
+
 
 current_data = get_current_weather(LATITUDE, LONGITUDE)
 current_temp = current_data["current"]["temperature_2m"]
@@ -115,3 +170,4 @@ print(forecast_df)
 historical_df.to_csv("historical_weather.csv", index=False)
 forecast_df.to_csv("forecast_weather.csv", index=False)
 print("\nData saved to CSV files.")
+generate_dashboard()
